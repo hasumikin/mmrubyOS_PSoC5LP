@@ -48,8 +48,15 @@
 
 #include <project.h>
 #include <stdio.h>
-#include "common.h"
+#include "project_common.h"
 
+#include "mrubyc/src/mrubyc.h"
+#include "mmrbc.h"
+#include "common.h"
+#include "compiler.h"
+#include "debug.h"
+#include "scope.h"
+#include "stream.h"
 
 /* Add an explicit reference to the floating point printf library to allow
 the usage of floating point conversion specifier */
