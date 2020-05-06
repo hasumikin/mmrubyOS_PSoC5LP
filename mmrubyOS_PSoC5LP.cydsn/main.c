@@ -83,36 +83,76 @@ uint8 errorStatus = 0u;
 *******************************************************************************/
 CY_ISR(RxIsr)
 {
-    uint8 rxStatus;         
-    uint8 rxData;           
-    
-    do
+  uint8 rxStatus;
+  uint8 rxData;
+  do
+  {
+    /* Read receiver status register */
+    rxStatus = UART_RXSTATUS_REG;
+    if((rxStatus & (UART_RX_STS_BREAK      | UART_RX_STS_PAR_ERROR |
+                    UART_RX_STS_STOP_ERROR | UART_RX_STS_OVERRUN)) != 0u)
     {
-        /* Read receiver status register */
-        rxStatus = UART_RXSTATUS_REG;
-
-        if((rxStatus & (UART_RX_STS_BREAK      | UART_RX_STS_PAR_ERROR |
-                        UART_RX_STS_STOP_ERROR | UART_RX_STS_OVERRUN)) != 0u)
-        {
-            /* ERROR handling. */
-            errorStatus |= rxStatus & ( UART_RX_STS_BREAK      | UART_RX_STS_PAR_ERROR | 
-                                        UART_RX_STS_STOP_ERROR | UART_RX_STS_OVERRUN);
+      /* ERROR handling. */
+      errorStatus |= rxStatus & ( UART_RX_STS_BREAK      | UART_RX_STS_PAR_ERROR |
+                                  UART_RX_STS_STOP_ERROR | UART_RX_STS_OVERRUN);
+    }
+    if((rxStatus & UART_RX_STS_FIFO_NOTEMPTY) != 0u)
+    {
+      /* Read data from the RX data register */
+      rxData = UART_RXDATA_REG;
+      if(errorStatus == 0u)
+      {
+        switch (rxData) {
+          case (0x08): /* '\b' backspace */
+            UART_TXDATA_REG = rxData;
+            UART_TXDATA_REG = ' ';
+            UART_TXDATA_REG = rxData;
+            break;
+          case (0x09): /* '\t' horizontal tab */
+            break;     /* ignore */
+          default:
+            /* Send data backward */
+            UART_TXDATA_REG = rxData;
         }
-        
-        if((rxStatus & UART_RX_STS_FIFO_NOTEMPTY) != 0u)
-        {
-            /* Read data from the RX data register */
-            rxData = UART_RXDATA_REG;
-            if(errorStatus == 0u)
-            {
-                /* Send data backward */
-                UART_TXDATA_REG = rxData;
-            }
-        }
-    }while((rxStatus & UART_RX_STS_FIFO_NOTEMPTY) != 0u);
-
+      }
+    }
+  }while((rxStatus & UART_RX_STS_FIFO_NOTEMPTY) != 0u);
 }
-    
+
+/*
+ * _fd is dummy
+ */
+int hal_write(int _fd, const void *buf, int nbytes)
+{
+  UART_PutArray( buf, nbytes );
+  return nbytes;
+}
+
+void run(uint8_t *mrb)
+{
+  init_static();
+  struct VM *vm = mrbc_vm_open(NULL);
+  if( vm == 0 ) {
+    FATALP("Error: Can't open VM.");
+    return;
+  }
+  if( mrbc_load_mrb(vm, mrb) != 0 ) {
+    FATALP("Error: Illegal bytecode.");
+    return;
+  }
+  mrbc_vm_begin(vm);
+  mrbc_vm_run(vm);
+  find_class_by_object(vm, vm->current_regs);
+  mrbc_value ret = mrbc_send(vm, vm->current_regs, 0, vm->current_regs, "inspect", 0);
+  hal_write(1, "=> ", 3);
+  hal_write(1, ret.string->data, ret.string->size);
+  hal_write(1, "\n", 1);
+  mrbc_vm_end(vm);
+  mrbc_vm_close(vm);
+}
+
+#define HEAP_SIZE (1024 * 40 - 1)
+static uint8_t heap[HEAP_SIZE];
 
 /*******************************************************************************
 * Function Name: main()
@@ -126,86 +166,58 @@ CY_ISR(RxIsr)
 *******************************************************************************/
 int main()
 {
-    uint8 button = 0u;
-    uint8 buttonPre = 0u;
-    
-    LED_Write(LED_OFF);     /* Clear LED */
-
-    UART_Start();           /* Start communication component */
-    UART_PutString("UART Full Duplex and printf() support Code Example Project \r\n");
+  uint8 button = 0u;
+  uint8 buttonPre = 0u;
+  LED_Write(LED_OFF);     /* Clear LED */
+  UART_Start();           /* Start communication component */
 
 #if(INTERRUPT_CODE_ENABLED == ENABLED)
-    isr_rx_StartEx(RxIsr);
+  isr_rx_StartEx(RxIsr);
 #endif /* INTERRUPT_CODE_ENABLED == ENABLED */
-    
-    CyGlobalIntEnable;      /* Enable global interrupts. */
-    
+
 #if(UART_PRINTF_ENABLED == ENABLED)
-{
-    uint32 i = 444444444u;
-    float f = 55.55555f;
-    
-    /* Use printf() function which will send formatted data through "UART" */
-    printf("Test printf function. long:%ld, ", i);    
-    /* PSoC 3: The total number of bytes that may be passed to this function is limited
-       due to the memory restrictions imposed by the 8051. 
-       A maximum of 40 bytes may be passed in LARGE model. 
-    */
-    printf("float:%2.5f \r\n", f);    
-}
-#endif /* UART_PRINTF_ENABLED == ENABLED */
-    UART_PutString("Enter the characters to transmit \r\n");
+  printf("\r\nprintf() is enabled\r\n\r\n");
+#endif
 
-    for(;;)
+  CyGlobalIntEnable;      /* Enable global interrupts. */
+
+  UART_PutString("Welcome to mmrubyOS!\r\n\r\n");
+  UART_PutString("% puts 'hello world!'\r\n");
+
+  mrbc_init(heap, HEAP_SIZE);
+
+  static Scope *scope;
+  scope = Scope_new(NULL);
+  StreamInterface *si = StreamInterface_new("puts 'hello world!'", STREAM_TYPE_MEMORY);
+  if (Compile(scope, si)) {
+    run(scope->vm_code);
+    UART_PutString("% ");
+//    SET_TRUE_RETURN();
+  } else {
+//    SET_FALSE_RETURN();
+  }
+  StreamInterface_free(si);
+
+  for(;;)
+  {
+    if(errorStatus != 0u)
     {
-        if(errorStatus != 0u)
-        {
-            /* Indicate an error on the LED */
-            LED_Write(LED_ON);
-            /* Clear error status */
-            errorStatus = 0u;
-        }
-        
-        /***********************************************************************
-        * Handle SW2 press. 
-        ***********************************************************************/
-        button = SW2_Read();
-        if((button == 0u) && (buttonPre != 0u))
-        {
-            LED_Write(LED_OFF);     /* Clear LED */
-        }
-        buttonPre = button;
-        
-        #if(INTERRUPT_CODE_ENABLED != ENABLED)
-        {
-            uint8 rxStatus;         
-            uint8 rxData;           
-            
-            /* Read status register. */
-            rxStatus = UART_ReadRxStatus();
-            
-            /* Check if data is received. */
-            if((rxStatus & UART_RX_STS_FIFO_NOTEMPTY) != 0u)    
-            {
-                /* Read received data */
-                rxData = UART_ReadRxData();
-
-                /* Check status on error*/
-                if((rxStatus & (UART_RX_STS_BREAK      | UART_RX_STS_PAR_ERROR |
-                                UART_RX_STS_STOP_ERROR | UART_RX_STS_OVERRUN)) != 0u)
-                {
-                    errorStatus |= rxStatus & ( UART_RX_STS_BREAK      | UART_RX_STS_PAR_ERROR | 
-                                                UART_RX_STS_STOP_ERROR | UART_RX_STS_OVERRUN);
-                }
-                else
-                {
-                    /* Send data backward */
-                    UART_WriteTxData(rxData);
-                }
-            }
-        }
-        #endif /* INTERRUPT_CODE_ENABLED != ENABLED */
+      /* Indicate an error on the LED */
+      LED_Write(LED_ON);
+      /* Clear error status */
+      errorStatus = 0u;
     }
+
+    /***********************************************************************
+    * Handle SW2 press. 
+    ***********************************************************************/
+    button = SW2_Read();
+    if((button == 0u) && (buttonPre != 0u))
+    {
+      LED_Write(LED_OFF);     /* Clear LED */
+    }
+    buttonPre = button;
+  }
 }
 
 /* [] END OF FILE */
