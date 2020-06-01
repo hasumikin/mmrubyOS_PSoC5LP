@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include "project_common.h"
 
-#include "shell.h"
+#include "shell.c"
 
 #include "mrubyc/src/mrubyc.h"
 #include "mmrbc.h"
@@ -117,37 +117,64 @@ c_exit_shell(mrbc_vm *vm, mrbc_value *v, int argc)
   */
 }
 
-void run(uint8_t *mrb)
+void vm_restart(struct VM *vm)
 {
-  init_static();
-  struct VM *vm = mrbc_vm_open(NULL);
-  if( vm == 0 ) {
-    FATALP("Error: Can't open VM.");
-    return;
-  }
-  if( mrbc_load_mrb(vm, mrb) != 0 ) {
-    FATALP("Error: Illegal bytecode.");
-    return;
-  }
-  mrbc_vm_begin(vm);
-  mrbc_vm_run(vm);
-  find_class_by_object(vm, vm->current_regs);
-  mrbc_value ret = mrbc_send(vm, vm->current_regs, 0, vm->current_regs, "inspect", 0);
+  vm->pc_irep = vm->irep;
+  vm->inst = vm->pc_irep->code;
+  vm->current_regs = vm->regs;
+  vm->callinfo_tail = NULL;
+  vm->target_class = mrbc_class_object;
+  vm->exc = 0;
+  vm->exception_tail = 0;
+  vm->error_code = 0;
+  vm->flag_preemption = 0;
+}
+
+static struct VM *c_vm;
+
+static void
+c_print_inspect(mrbc_vm *vm, mrbc_value *v, int argc)
+{
+  find_class_by_object(c_vm, c_vm->current_regs);
+  mrbc_value ret = mrbc_send(c_vm, c_vm->current_regs, 0, c_vm->current_regs, "inspect", 0);
   hal_write(1, "=> ", 3);
   hal_write(1, ret.string->data, ret.string->size);
   hal_write(1, "\r\n", 2);
-  mrbc_vm_end(vm);
-  mrbc_vm_close(vm);
 }
+
+static bool firstRun = true;
+
+void vm_run(uint8_t *mrb)
+{
+  if (firstRun) {
+    c_vm = mrbc_vm_open(NULL);
+    if(c_vm == NULL) {
+      hal_write(1, "Error: Can't open VM.\r\n", 23);
+      return;
+    }
+  }
+  if(mrbc_load_mrb(c_vm, mrb) != 0) {
+    hal_write(1, "Error: Illegal bytecode.\r\n", 26);
+    return;
+  }
+  if (firstRun) {
+    mrbc_vm_begin(c_vm);
+    firstRun = false;
+  } else {
+    vm_restart(c_vm);
+  }
+  mrbc_vm_run(c_vm);
+}
+
+static Scope *scope;
 
 static void
 c_compile_and_run(mrbc_vm *vm, mrbc_value *v, int argc)
 {
-  static Scope *scope;
-  scope = Scope_new(NULL);
+  if (firstRun) scope = Scope_new(NULL);
   StreamInterface *si = StreamInterface_new((char *)GET_STRING_ARG(1), STREAM_TYPE_MEMORY);
   if (Compile(scope, si)) {
-    run(scope->vm_code);
+    vm_run(scope->vm_code);
     SET_TRUE_RETURN();
   } else {
     SET_FALSE_RETURN();
@@ -191,6 +218,7 @@ int main()
   mrbc_init(heap, HEAP_SIZE);
 
   mrbc_define_method(0, mrbc_class_object, "compile_and_run", c_compile_and_run);
+  mrbc_define_method(0, mrbc_class_object, "print_inspect", c_print_inspect);
   mrbc_define_method(0, mrbc_class_object, "fd_empty?", c_is_fd_empty);
   mrbc_define_method(0, mrbc_class_object, "print", c_print);
   mrbc_define_method(0, mrbc_class_object, "getc", c_getc);
