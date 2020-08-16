@@ -71,12 +71,6 @@ int hal_write(int _fd, const void *buf, int nbytes)
 }
 
 static void
-c_print(mrbc_vm *vm, mrbc_value *v, int argc)
-{
-  hal_write(1, GET_STRING_ARG(1), strlen((char *)GET_STRING_ARG(1)));
-}
-
-static void
 c_is_fd_empty(mrbc_vm *vm, mrbc_value *v, int argc)
 {
   uint8 rxStatus;
@@ -132,16 +126,6 @@ void vm_restart(struct VM *vm)
 
 static struct VM *c_vm;
 
-static void
-c_print_inspect(mrbc_vm *vm, mrbc_value *v, int argc)
-{
-  find_class_by_object(c_vm->current_regs);
-  mrbc_value ret = mrbc_send(c_vm, c_vm->current_regs, 0, c_vm->current_regs, "inspect", 0);
-  hal_write(1, "=> ", 3);
-  hal_write(1, ret.string->data, ret.string->size);
-  hal_write(1, "\r\n", 2);
-}
-
 static bool firstRun = true;
 
 void vm_run(uint8_t *mrb)
@@ -172,7 +156,7 @@ static void
 c_execute_vm(mrbc_vm *vm, mrbc_value *v, int argc)
 {
   vm_run(p->scope->vm_code);
-  SET_RETURN(c_vm->current_regs[1]);
+  SET_RETURN(c_vm->current_regs[p->scope->sp - 1]);
 }
 
 static void
@@ -181,7 +165,6 @@ c_compile(mrbc_vm *vm, mrbc_value *v, int argc)
   if (firstRun) p = Compiler_parseInitState();
   StreamInterface *si = StreamInterface_new((char *)GET_STRING_ARG(1), STREAM_TYPE_MEMORY);
   if (Compiler_compile(p, si)) {
-    vm_run(p->scope->vm_code);
     SET_TRUE_RETURN();
   } else {
     SET_FALSE_RETURN();
@@ -241,10 +224,8 @@ int main()
   mrbc_init(heap, HEAP_SIZE);
 
   mrbc_define_method(0, mrbc_class_object, "compile", c_compile);
-  mrbc_define_method(0, mrbc_class_object, "print_inspect", c_print_inspect);
   mrbc_define_method(0, mrbc_class_object, "execute_vm", c_execute_vm);
   mrbc_define_method(0, mrbc_class_object, "fd_empty?", c_is_fd_empty);
-  mrbc_define_method(0, mrbc_class_object, "print", c_print);
   mrbc_define_method(0, mrbc_class_object, "getc", c_getc);
   mrbc_define_method(0, mrbc_class_object, "pid", c_pid);
   mrbc_define_method(0, mrbc_class_object, "led_on", c_led_on);
