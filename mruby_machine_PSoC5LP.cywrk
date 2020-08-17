@@ -2,12 +2,12 @@
 <CyXmlSerializer>
 <!--This file is machine generated and read. It is not intended to be edited by hand.-->
 <!--Due to this, there is no schema for this file.-->
-<CyGuid_2867d519-54d2-4c01-9830-c51cb08bc3dd type_name="CyDesigner.Common.ProjMgmt.Model.CyPrjMgmtWorkspaceSerialize" version="5" xml_contents_version="3" name="mmrubyOS_PSoC5LP" persistent="mmrubyOS_PSoC5LP.cywrk" platform="NOT_USED">
-<current_project name=".\mmrubyOS_PSoC5LP.cydsn\mmrubyOS_PSoC5LP.cyprj" />
+<CyGuid_2867d519-54d2-4c01-9830-c51cb08bc3dd type_name="CyDesigner.Common.ProjMgmt.Model.CyPrjMgmtWorkspaceSerialize" version="5" xml_contents_version="3" name="mruby_machine_PSoC5LP" persistent="mruby_machine_PSoC5LP.cywrk" platform="NOT_USED">
+<current_project name=".\mruby_machine_PSoC5LP.cydsn\mruby_machine_PSoC5LP.cyprj" />
 <wrkspc_folders />
 <files />
 <projects>
-<v>.\mmrubyOS_PSoC5LP.cydsn\mmrubyOS_PSoC5LP.cyprj</v>
+<v>.\mruby_machine_PSoC5LP.cydsn\mruby_machine_PSoC5LP.cyprj</v>
 </projects>
 <workspace_id v="af0c00cb-08d3-4e7f-9cbd-353c0f0bd23e" />
 <WriteAppVersionLastSavedWith v="4.3.0.1445" />

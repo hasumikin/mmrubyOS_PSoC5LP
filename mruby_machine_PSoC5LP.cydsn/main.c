@@ -1,16 +1,12 @@
 /*****************************************************************************
 *
-* Project: mmrubyOS
+* Project: mruby_machine_PSoC5LP
 *
 * File Name: main.c
 *
 * Version: 0.1.0
 *
-* Description:
-*  This project is based on an example code of UART Full duplex.
-*
-* Related Document:
-* CE210741_UART_Full_Duplex_and_printf_Support_with_PSoC_3_4_5LP.pdf
+* Copyright (c) 2020 HASUMI Hitoshi
 *
 *******************************************************************************/
 
